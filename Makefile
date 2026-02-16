@@ -16,7 +16,7 @@ install: venv
 
 # Usa Opción A (una línea) o B (.ONESHELL). Aquí dejo la A:
 run-local:
-	( set -a && . .env && exec $(VENV)/bin/python -m uvicorn src.app:app --host 0.0.0.0 --port $(PORT) --reload )
+	( set -a && . .env && exec $(VENV)/bin/python -m uvicorn src.app:app --host 0.0.0.0 --port $(PORT) --reload --no-access-log --log-level warning )
 
 clean:
 	rm -rf $(VENV)

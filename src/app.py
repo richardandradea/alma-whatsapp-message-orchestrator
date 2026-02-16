@@ -1,9 +1,24 @@
+# IMPORTANTE: Configurar logging ANTES de cualquier otra importación
+# Esto asegura que los logs funcionen desde el inicio
+import logging
+import sys
+
+# Configurar logging básico inmediatamente con nivel INFO
+# Esto asegura que los logs desde INFO se muestren desde el inicio
+logging.basicConfig(
+    level=logging.INFO,  # Nivel mínimo: INFO (muestra INFO, WARNING, ERROR, CRITICAL)
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    stream=sys.stderr,
+    force=True  # Forzar reconfiguración si ya estaba configurado
+)
+
 from fastapi import FastAPI
 from src.api.v1 import api_v1
 from src.core.config import get_settings
 from src.logger.logger_config import LoggerConfig
 
-# Configurar logging antes de crear la app
+# Configurar logging completo después de tener acceso a settings
 LoggerConfig.configure()
 logger = LoggerConfig.get_logger(__name__)
 _settings = get_settings()
