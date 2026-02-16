@@ -105,61 +105,92 @@ async def verify(
     hub_verify_token: str | None = Query(default=None, alias="hub.verify_token"),
     hub_challenge: str | None = Query(default=None, alias="hub.challenge")
 ):
+    logger.info("🔐 Verificación de webhook de WhatsApp")
+    logger.debug(f"   Mode: {hub_mode}, Token recibido: {hub_verify_token is not None}, Challenge: {hub_challenge is not None}")
+    
     if hub_mode == "subscribe" and hub_verify_token == _settings.whatsapp_verify_token.get_secret_value():
+        logger.info("✅ Verificación exitosa")
         return PlainTextResponse(hub_challenge or "", status_code=200)
+    
+    logger.warning("❌ Verificación fallida")
     raise HTTPException(status_code=403, detail="Verification failed")
 
 @router.post("/webhook", response_class=PlainTextResponse)
 async def receive(request: Request):
+    logger.info("=" * 80)
+    logger.info("📥 INICIO: Recepción de webhook de WhatsApp")
     try:
         payload = await request.json()
-        logger.info(f"Received WhatsApp webhook message: {json.dumps(payload)}")
+        logger.info(f"📦 Payload recibido: {json.dumps(payload, ensure_ascii=False)}")
         
         # Extraer número de teléfono y mensaje del payload
+        logger.debug("🔍 Extrayendo número de teléfono y mensaje del payload...")
         phone_number, message_text = extract_whatsapp_message(payload)
         
         if phone_number and message_text:
-            logger.info(f"Procesando mensaje de {phone_number}: {message_text}")
+            logger.info(f"✅ Mensaje extraído exitosamente")
+            logger.info(f"   📱 Teléfono: {phone_number}")
+            logger.info(f"   💬 Mensaje: {message_text}")
             
             # Enviar al agente y obtener respuesta
             try:
+                logger.info("🤖 Iniciando comunicación con el agente...")
                 agent_client = AgentClient()
+                logger.debug(f"   🔗 URL del agente: {agent_client.agent_url}")
+                
                 agent_response = await agent_client.send_message(phone_number, message_text)
                 
                 if agent_response:
-                    logger.info(f"Mensaje enviado al agente exitosamente para {phone_number}")
+                    logger.info(f"✅ Respuesta recibida del agente para {phone_number}")
+                    logger.debug(f"   📄 Tipo de respuesta: {type(agent_response).__name__}")
                     
                     # Extraer texto de la respuesta del agente
+                    logger.debug("🔍 Extrayendo texto de la respuesta del agente...")
                     response_text = agent_client.extract_agent_response_text(agent_response)
                     
                     if response_text:
-                        logger.info(f"Respuesta del agente para {phone_number}: {response_text}")
+                        logger.info(f"✅ Texto extraído de la respuesta del agente")
+                        logger.info(f"   📝 Respuesta: {response_text[:200]}{'...' if len(response_text) > 200 else ''}")
                         
                         # Opcionalmente, enviar la respuesta de vuelta a WhatsApp
                         if _settings.whatsapp_api_url and _settings.whatsapp_access_token:
+                            logger.info("📤 Enviando respuesta a WhatsApp...")
                             try:
                                 whatsapp_client = WhatsAppClient()
+                                logger.debug(f"   🔗 URL de WhatsApp API: {_settings.whatsapp_api_url}")
+                                
                                 sent = await whatsapp_client.send_message(phone_number, response_text)
                                 if sent:
-                                    logger.info(f"Respuesta enviada a WhatsApp para {phone_number}")
+                                    logger.info(f"✅ Respuesta enviada a WhatsApp exitosamente para {phone_number}")
                                 else:
-                                    logger.warning(f"Error al enviar respuesta a WhatsApp para {phone_number}")
+                                    logger.warning(f"⚠️  Error al enviar respuesta a WhatsApp para {phone_number}")
                             except ValueError as e:
-                                logger.warning(f"No se puede enviar a WhatsApp: {e}")
+                                logger.warning(f"⚠️  No se puede enviar a WhatsApp: {e}")
                             except Exception as e:
-                                logger.error(f"Error inesperado al enviar a WhatsApp: {e}")
+                                logger.error(f"❌ Error inesperado al enviar a WhatsApp: {e}", exc_info=True)
+                        else:
+                            logger.info("ℹ️  WhatsApp API no configurado, omitiendo envío de respuesta")
                     else:
-                        logger.warning(f"No se pudo extraer texto de la respuesta del agente: {agent_response}")
+                        logger.warning(f"⚠️  No se pudo extraer texto de la respuesta del agente")
+                        logger.debug(f"   📄 Respuesta completa: {json.dumps(agent_response, ensure_ascii=False)}")
                 else:
-                    logger.warning(f"Error al enviar mensaje al agente para {phone_number}")
+                    logger.warning(f"⚠️  No se recibió respuesta del agente para {phone_number}")
             except ValueError as e:
-                logger.warning(f"No se puede enviar al agente: {e}. Continuando sin error.")
+                logger.warning(f"⚠️  No se puede enviar al agente: {e}. Continuando sin error.")
             except Exception as e:
-                logger.error(f"Error inesperado al enviar al agente: {e}")
+                logger.error(f"❌ Error inesperado al enviar al agente: {e}", exc_info=True)
         else:
-            logger.info("No se encontró mensaje de texto en el payload o el payload no es un mensaje")
+            logger.info("ℹ️  No se encontró mensaje de texto en el payload o el payload no es un mensaje")
+            if not phone_number:
+                logger.debug("   ⚠️  No se pudo extraer el número de teléfono")
+            if not message_text:
+                logger.debug("   ⚠️  No se pudo extraer el texto del mensaje")
         
+        logger.info("✅ FIN: Webhook procesado exitosamente")
+        logger.info("=" * 80)
         return PlainTextResponse("EVENT_RECEIVED", status_code=200)
     except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
+        logger.error("=" * 80)
+        logger.error(f"❌ ERROR CRÍTICO procesando webhook: {e}", exc_info=True)
+        logger.error("=" * 80)
         raise HTTPException(status_code=500, detail=str(e))
