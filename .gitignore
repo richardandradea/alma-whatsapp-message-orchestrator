@@ -1,0 +1,158 @@
+# --- Python básico ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Compilación / distribución
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+pip-wheel-metadata/
+MANIFEST
+.installed.cfg
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+.python-version  # pyenv/poetry (mantener si lo necesitas)
+
+# Dependencias locales / cachés
+pip-log.txt
+pip-delete-this-directory.txt
+.cache/
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.dmypy.json
+.ipynb_checkpoints/
+__pypackages__/        # PEP 582
+.pyproject-build/
+
+# Cobertura y análisis
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+*.lcov
+.tox/
+.nox/
+
+# Herramientas de estilo / linters
+ruff_cache/
+.mr_proper/
+.pyre_configuration.local
+
+# Notebooks y datos temporales
+*.nbconvert.ipynb
+*.checkpoint.ipynb
+# Archivos de datos que no quieras versionar (ajusta a tu caso):
+data/
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.h5
+*.db
+*.sqlite*
+!data/.gitkeep
+
+# Frameworks comunes
+# Django
+*.log
+local_settings.py
+db.sqlite3
+media/
+staticfiles/
+# Flask/FastAPI
+instance/
+*.sqlite
+
+# Empaquetado/ejecutables
+*.manifest
+*.spec          # PyInstaller
+*.app
+*.exe
+*.dmg
+
+# Variables de entorno / secretos
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+
+# Docker
+Dockerfile.*.tmp
+docker-compose.*.override.yml
+.docker/
+.tmp/
+tmp/
+
+# IDEs y editores
+# VS Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.sample.json
+.history/
+# PyCharm / IntelliJ
+.idea/
+*.iml
+# Otros
+.sublime-project
+.sublime-workspace
+
+# Sistemas operativos
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Git / herramientas
+.git-credentials
+.gitconfig.local
+.pre-commit-config-local.yaml
+.reports/
+
+# Contenedores / orquestación (ajusta segun uso)
+.k8s/
+helm-chart/
+
+# Logs (global)
+logs/
+log/
+**/logs/
+**/log/
+*.log
+*.log.*
+*.out
+*.err
+
+# Logs de frameworks/servers comunes
+gunicorn*.log
+uvicorn*.log
+celery*.log
+*.sqlite-journal
+
+# Si quieres mantener la carpeta vacía en el repo:
+!logs/.gitkeep
+
+###
+src/rag
