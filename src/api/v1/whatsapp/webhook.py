@@ -34,6 +34,10 @@ def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
     """
     Extrae el número de teléfono y el texto del mensaje del payload de WhatsApp.
     
+    Soporta dos tipos de mensajes:
+    1. Mensajes de texto: extrae el texto del campo text.body
+    2. Mensajes interactivos (botones): extrae el ID del botón desde interactive.button_reply.id
+    
     Estructura esperada del payload:
     {
       "object": "whatsapp_business_account",
@@ -53,11 +57,34 @@ def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
       }]
     }
     
+    O para mensajes interactivos:
+    {
+      "object": "whatsapp_business_account",
+      "entry": [{
+        "changes": [{
+          "value": {
+            "messages": [{
+              "from": "569XXXXXXXX",
+              "type": "interactive",
+              "interactive": {
+                "type": "button_reply",
+                "button_reply": {
+                  "id": "complete",
+                  "title": "Entendido"
+                }
+              }
+            }]
+          }
+        }]
+      }]
+    }
+    
     Args:
         payload: Payload completo del webhook de WhatsApp
         
     Returns:
         Tupla (phone_number, message_text) o (None, None) si no se encuentra
+        Para mensajes interactivos, message_text será el ID del botón
     """
     try:
         # Validar que el objeto sea de WhatsApp Business Account
@@ -93,16 +120,39 @@ def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
                     phone_number = message.get("from")
                     message_type = message.get("type")
                     
-                    # Solo procesar mensajes de texto
-                    if message_type == "text" and phone_number:
+                    if not phone_number:
+                        logger.debug("Mensaje sin número de teléfono")
+                        continue
+                    
+                    # Procesar mensajes de texto
+                    if message_type == "text":
                         text_obj = message.get("text", {})
                         message_text = text_obj.get("body", "")
                         
                         if message_text:
-                            logger.debug(f"Extraído: phone={phone_number}, text={message_text}")
+                            logger.debug(f"Extraído mensaje de texto: phone={phone_number}, text={message_text}")
                             return phone_number, message_text
                         else:
                             logger.warning(f"Mensaje de texto sin body: {message}")
+                    
+                    # Procesar mensajes interactivos (botones)
+                    elif message_type == "interactive":
+                        interactive = message.get("interactive", {})
+                        interactive_type = interactive.get("type")
+                        
+                        if interactive_type == "button_reply":
+                            button_reply = interactive.get("button_reply", {})
+                            button_id = button_reply.get("id")
+                            button_title = button_reply.get("title", "")
+                            
+                            if button_id:
+                                logger.info(f"Extraído mensaje interactivo: phone={phone_number}, button_id={button_id}, button_title={button_title}")
+                                # Enviar el ID del botón como mensaje al agente
+                                return phone_number, button_id
+                            else:
+                                logger.warning(f"Mensaje interactivo sin button_reply.id: {message}")
+                        else:
+                            logger.debug(f"Ignorando mensaje interactivo tipo: {interactive_type}")
                     else:
                         logger.debug(f"Ignorando mensaje tipo: {message_type}, from: {phone_number}")
                             
