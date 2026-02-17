@@ -81,3 +81,102 @@ class WhatsAppClient:
         except Exception as e:
             logger.error(f"❌ Error inesperado al enviar a WhatsApp: {e}", exc_info=True)
             return False
+    
+    async def send_interactive_message(
+        self, 
+        phone_number: str, 
+        body: str, 
+        footer: str | None = None,
+        buttons: list[dict] | None = None
+    ) -> bool:
+        """
+        Envía un mensaje interactivo con botones a WhatsApp.
+        
+        Args:
+            phone_number: Número de teléfono del destinatario (con código de país, sin +)
+            body: Texto principal del mensaje
+            footer: Texto del footer (opcional)
+            buttons: Lista de botones con formato [{"id": "button_id", "title": "Button Title"}]
+            
+        Returns:
+            True si se envió correctamente, False en caso contrario
+        """
+        try:
+            # Validar que haya botones
+            if not buttons or len(buttons) == 0:
+                logger.error("❌ No se proporcionaron botones para el mensaje interactivo")
+                return False
+            
+            # Validar cantidad de botones (WhatsApp permite máximo 3)
+            if len(buttons) > 3:
+                logger.error(f"❌ Demasiados botones: {len(buttons)}. WhatsApp permite máximo 3 botones")
+                return False
+            
+            # Formatear botones al formato de WhatsApp
+            formatted_buttons = []
+            for button in buttons:
+                if "id" not in button or "title" not in button:
+                    logger.warning(f"⚠️  Botón inválido ignorado: {button}")
+                    continue
+                formatted_buttons.append({
+                    "type": "reply",
+                    "reply": {
+                        "id": button["id"],
+                        "title": button["title"]
+                    }
+                })
+            
+            if len(formatted_buttons) == 0:
+                logger.error("❌ No se pudo formatear ningún botón válido")
+                return False
+            
+            # Formato para WhatsApp Business API - Mensaje interactivo con botones
+            payload = {
+                "messaging_product": "whatsapp",
+                "to": phone_number,
+                "type": "interactive",
+                "interactive": {
+                    "type": "button",
+                    "body": {
+                        "text": body
+                    },
+                    "action": {
+                        "buttons": formatted_buttons
+                    }
+                }
+            }
+            
+            # Agregar footer si está presente
+            if footer:
+                payload["interactive"]["footer"] = {
+                    "text": footer
+                }
+            
+            logger.info(f"📤 Enviando mensaje interactivo a WhatsApp para {phone_number}")
+            logger.info(f"   📦 Payload enviado: {json.dumps(payload, ensure_ascii=False, indent=2)}")
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                logger.debug(f"   ⏱️  Timeout configurado: 30.0s")
+                response = await client.post(
+                    self.whatsapp_api_url,
+                    json=payload,
+                    headers={"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"}
+                )
+                logger.debug(f"   📡 Respuesta HTTP recibida: Status {response.status_code}")
+                response.raise_for_status()
+                
+                response_data = response.json() if response.content else {}
+                logger.info(f"✅ Mensaje interactivo enviado a WhatsApp exitosamente. Status: {response.status_code}")
+                logger.debug(f"   📄 Respuesta de WhatsApp: {json.dumps(response_data, ensure_ascii=False)}")
+                return True
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"❌ Error HTTP al enviar mensaje interactivo a WhatsApp: {e.response.status_code}")
+            logger.error(f"   📄 Respuesta del servidor: {e.response.text}")
+            return False
+        except httpx.RequestError as e:
+            logger.error(f"❌ Error de conexión a WhatsApp: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Error inesperado al enviar mensaje interactivo a WhatsApp: {e}", exc_info=True)
+            return False

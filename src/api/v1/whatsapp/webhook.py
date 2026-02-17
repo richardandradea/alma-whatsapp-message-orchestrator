@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException, Query
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, JSONResponse
+from pydantic import BaseModel, Field
+from typing import List, Optional
 from src.core.config import get_settings
 from src.logger.logger_config import LoggerConfig
 from src.services.agent_client import AgentClient
@@ -9,6 +11,23 @@ import json
 router = APIRouter(prefix="/whatsapp", tags=["whatsapp"])
 logger = LoggerConfig.get_logger(__name__)
 _settings = get_settings()
+
+
+# Modelos Pydantic para validación de payloads
+class TaskAction(BaseModel):
+    """Modelo para acciones/botones de la tarea"""
+    id: str = Field(..., description="ID único del botón")
+    title: str = Field(..., description="Título del botón")
+
+
+class TaskNotificationRequest(BaseModel):
+    """Modelo para el payload de notificación de tarea"""
+    task_id: str = Field(..., description="ID único de la tarea")
+    notification_type: str = Field(..., description="Tipo de notificación (ej: 'reminder')")
+    to: int = Field(..., description="Número de teléfono del destinatario (sin prefijo +)")
+    body: str = Field(..., description="Cuerpo del mensaje")
+    footer: Optional[str] = Field(None, description="Texto del footer (opcional)")
+    actions: List[TaskAction] = Field(..., description="Lista de botones/acciones (máximo 3)")
 
 
 def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
@@ -192,5 +211,99 @@ async def receive(request: Request):
     except Exception as e:
         logger.error("=" * 80)
         logger.error(f"❌ ERROR CRÍTICO procesando webhook: {e}", exc_info=True)
+        logger.error("=" * 80)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tasksnotification")
+async def task_notification(request: TaskNotificationRequest):
+    """
+    Endpoint para enviar notificaciones de tareas con botones interactivos a WhatsApp.
+    
+    Recibe un payload con información de la tarea y envía un mensaje interactivo
+    con botones al usuario de WhatsApp.
+    """
+    logger.info("=" * 80)
+    logger.info("📋 INICIO: Notificación de tarea")
+    logger.info(f"   📦 Payload recibido: {json.dumps(request.model_dump(), ensure_ascii=False, indent=2)}")
+    
+    try:
+        # Validar que WhatsApp API esté configurado
+        if not _settings.whatsapp_api_url or not _settings.whatsapp_access_token:
+            logger.error("❌ WhatsApp API no está configurado")
+            raise HTTPException(
+                status_code=500, 
+                detail="WhatsApp API no está configurado. Configure WHATSAPP_API_URL y WHATSAPP_ACCESS_TOKEN"
+            )
+        
+        # Validar cantidad de botones (WhatsApp permite máximo 3)
+        if len(request.actions) > 3:
+            logger.error(f"❌ Demasiados botones: {len(request.actions)}. WhatsApp permite máximo 3")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Demasiados botones: {len(request.actions)}. WhatsApp permite máximo 3 botones"
+            )
+        
+        if len(request.actions) == 0:
+            logger.error("❌ No se proporcionaron botones")
+            raise HTTPException(
+                status_code=400,
+                detail="Se requiere al menos un botón en 'actions'"
+            )
+        
+        # Convertir número de teléfono a string
+        phone_number = str(request.to)
+        logger.info(f"   📱 Teléfono destino: {phone_number}")
+        logger.info(f"   📝 Cuerpo del mensaje: {request.body}")
+        if request.footer:
+            logger.info(f"   📄 Footer: {request.footer}")
+        logger.info(f"   🔘 Botones: {len(request.actions)}")
+        
+        # Formatear botones para WhatsAppClient
+        buttons = [{"id": action.id, "title": action.title} for action in request.actions]
+        
+        # Enviar mensaje interactivo a WhatsApp
+        try:
+            whatsapp_client = WhatsAppClient()
+            logger.info("📤 Enviando notificación de tarea a WhatsApp...")
+            
+            sent = await whatsapp_client.send_interactive_message(
+                phone_number=phone_number,
+                body=request.body,
+                footer=request.footer,
+                buttons=buttons
+            )
+            
+            if sent:
+                logger.info(f"✅ Notificación de tarea enviada exitosamente a {phone_number}")
+                logger.info("=" * 80)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": True,
+                        "message": "Notificación de tarea enviada exitosamente",
+                        "task_id": request.task_id,
+                        "phone_number": phone_number
+                    }
+                )
+            else:
+                logger.error(f"❌ Error al enviar notificación de tarea a {phone_number}")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Error al enviar notificación de tarea a WhatsApp"
+                )
+                
+        except ValueError as e:
+            logger.error(f"❌ Error de configuración: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error(f"❌ Error inesperado al enviar notificación: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Error al enviar notificación: {str(e)}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("=" * 80)
+        logger.error(f"❌ ERROR CRÍTICO procesando notificación de tarea: {e}", exc_info=True)
         logger.error("=" * 80)
         raise HTTPException(status_code=500, detail=str(e))

@@ -9,6 +9,7 @@ A **FastAPI-based microservice** that receives WhatsApp Business API webhook mes
 * **Versioned API (`/api/v1/...`)** for scalable evolution
 * **Webhook Receiver**: Handles WhatsApp Business API webhook verification and message reception
 * **Agent Integration**: Formats and forwards messages to an agent service
+* **Interactive Messages**: Send task notifications with interactive buttons to WhatsApp users
 * **Structured Logging**: Centralized and detailed logs for observability
 * **Docker Support**: Ready-to-deploy container setup
 * **Health Checks**: Built-in endpoint for liveness and readiness
@@ -170,11 +171,12 @@ El servicio extraerá automáticamente el texto de la respuesta y, si está conf
 
 ### 🟢 Primary (Versioned)
 
-| Method | Endpoint                   | Description                   |
-| ------ | -------------------------- | ----------------------------- |
-| `GET`  | `/api/v1/whatsapp/health`  | Health check                  |
-| `GET`  | `/api/v1/whatsapp/webhook` | WhatsApp webhook verification |
-| `POST` | `/api/v1/whatsapp/webhook` | WhatsApp message receiver     |
+| Method | Endpoint                           | Description                              |
+| ------ | ---------------------------------- | ---------------------------------------- |
+| `GET`  | `/api/v1/whatsapp/health`          | Health check                             |
+| `GET`  | `/api/v1/whatsapp/webhook`         | WhatsApp webhook verification            |
+| `POST` | `/api/v1/whatsapp/webhook`         | WhatsApp message receiver                |
+| `POST` | `/api/v1/whatsapp/tasksnotification` | Send task notifications with buttons    |
 
 #### **Webhook Verification**
 
@@ -338,6 +340,101 @@ Response:
 ```
 200 OK - EVENT_RECEIVED
 ```
+
+#### **Task Notification**
+
+**POST** `/api/v1/whatsapp/tasksnotification`
+
+Envía notificaciones de tareas con mensajes interactivos (botones) a usuarios de WhatsApp.
+
+**Requisitos:**
+- `WHATSAPP_API_URL` debe estar configurado
+- `WHATSAPP_ACCESS_TOKEN` debe estar configurado
+
+**Headers:**
+```
+Content-Type: application/json
+```
+
+**Body (JSON):**
+```json
+{
+  "task_id": "ab83f127-9fa6-498a-8376-b84f087e266b",
+  "notification_type": "reminder",
+  "to": 56994962184,
+  "body": "Recordatorio: Ir al doctor en 2 horas",
+  "footer": "18 de febrero, 5:00 PM",
+  "actions": [
+    {
+      "id": "snooze",
+      "title": "Posponer"
+    },
+    {
+      "id": "dismiss",
+      "title": "Entendido"
+    }
+  ]
+}
+```
+
+**Descripción de campos:**
+- `task_id` (string, requerido): ID único de la tarea
+- `notification_type` (string, requerido): Tipo de notificación (ej: "reminder", "alert", etc.)
+- `to` (integer, requerido): Número de teléfono del destinatario (sin prefijo +)
+- `body` (string, requerido): Texto principal del mensaje (máximo 1024 caracteres)
+- `footer` (string, opcional): Texto del footer que aparece debajo del mensaje (máximo 60 caracteres)
+- `actions` (array, requerido): Lista de botones/acciones
+  - Mínimo: 1 botón
+  - Máximo: 3 botones (límite de WhatsApp)
+  - Cada botón debe tener:
+    - `id` (string): ID único del botón (usado cuando el usuario hace clic)
+    - `title` (string): Texto del botón (máximo 20 caracteres)
+
+**Response exitosa (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Notificación de tarea enviada exitosamente",
+  "task_id": "ab83f127-9fa6-498a-8376-b84f087e266b",
+  "phone_number": "56994962184"
+}
+```
+
+**Errores posibles:**
+
+- `400 Bad Request`: 
+  - Demasiados botones (más de 3)
+  - No se proporcionaron botones
+  - Payload inválido
+
+- `500 Internal Server Error`:
+  - WhatsApp API no configurado
+  - Error al enviar mensaje a WhatsApp
+
+**Ejemplo de uso:**
+```bash
+curl -X POST http://localhost:8080/api/v1/whatsapp/tasksnotification \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task_id": "ab83f127-9fa6-498a-8376-b84f087e266b",
+    "notification_type": "reminder",
+    "to": 56994962184,
+    "body": "Recordatorio: Ir al doctor en 2 horas",
+    "footer": "18 de febrero, 5:00 PM",
+    "actions": [
+      {
+        "id": "snooze",
+        "title": "Posponer"
+      },
+      {
+        "id": "dismiss",
+        "title": "Entendido"
+      }
+    ]
+  }'
+```
+
+**Nota:** Cuando el usuario hace clic en un botón, WhatsApp enviará un webhook al endpoint `/api/v1/whatsapp/webhook` con el `id` del botón seleccionado en el campo `button.payload`.
 
 ---
 
