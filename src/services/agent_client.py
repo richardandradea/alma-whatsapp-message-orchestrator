@@ -73,7 +73,7 @@ class AgentClient:
         try:
             payload = self.format_message(phone_number, message_text)
             logger.info(f"📤 Enviando mensaje al agente: {self.agent_url}")
-            logger.debug(f"   📦 Payload completo: {json.dumps(payload, ensure_ascii=False)}")
+            logger.info(f"   📦 Payload enviado al agente: {json.dumps(payload, ensure_ascii=False, indent=2)}")
             
             async with httpx.AsyncClient(timeout=30.0) as client:
                 logger.debug(f"   ⏱️  Timeout configurado: 30.0s")
@@ -88,10 +88,10 @@ class AgentClient:
                 # Obtener la respuesta del agente
                 agent_response = response.json()
                 logger.info(f"✅ Mensaje enviado al agente exitosamente. Status: {response.status_code}")
+                logger.info(f"   📥 Respuesta recibida del agente: {json.dumps(agent_response, ensure_ascii=False, indent=2)}")
                 logger.debug(f"   📄 Tipo de respuesta: {type(agent_response).__name__}")
                 if isinstance(agent_response, list):
                     logger.debug(f"   📊 Cantidad de elementos en array: {len(agent_response)}")
-                logger.debug(f"   📦 Respuesta completa: {json.dumps(agent_response, ensure_ascii=False)}")
                 
                 return agent_response
                 
