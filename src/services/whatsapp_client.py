@@ -180,3 +180,63 @@ class WhatsAppClient:
         except Exception as e:
             logger.error(f"❌ Error inesperado al enviar mensaje interactivo a WhatsApp: {e}", exc_info=True)
             return False
+    
+    async def send_typing_indicator(self, phone_number: str, is_typing: bool = True) -> bool:
+        """
+        Envía un indicador de typing (escribiendo) a WhatsApp.
+        
+        Según la documentación oficial de WhatsApp Business API:
+        https://developers.facebook.com/documentation/business-messaging/whatsapp/typing-indicators
+        
+        Args:
+            phone_number: Número de teléfono del destinatario (con código de país, sin +)
+            is_typing: True para mostrar "escribiendo...", False para ocultarlo (se envía un mensaje vacío)
+            
+        Returns:
+            True si se envió correctamente, False en caso contrario
+        """
+        try:
+            # Según la documentación oficial, el formato correcto es:
+            # Para activar typing: type: "typing"
+            # Para desactivar: simplemente no se envía nada o se envía un mensaje normal
+            
+            if not is_typing:
+                # Para desactivar el typing, no necesitamos enviar nada especial
+                # El typing se desactiva automáticamente cuando enviamos un mensaje
+                logger.debug(f"⌨️  Typing se desactivará automáticamente al enviar el siguiente mensaje")
+                return True
+            
+            # Formato correcto según documentación oficial de WhatsApp Business API
+            payload = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": phone_number,
+                "type": "typing"
+            }
+            
+            logger.info(f"⌨️  Enviando indicador de typing a WhatsApp para {phone_number}")
+            logger.debug(f"   📦 Payload: {json.dumps(payload, ensure_ascii=False)}")
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    self.whatsapp_api_url,
+                    json=payload,
+                    headers={"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"}
+                )
+                response.raise_for_status()
+                
+                response_data = response.json() if response.content else {}
+                logger.info(f"✅ Indicador de typing enviado exitosamente. Status: {response.status_code}")
+                logger.debug(f"   📄 Respuesta de WhatsApp: {json.dumps(response_data, ensure_ascii=False)}")
+                return True
+                
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"⚠️  Error HTTP al enviar indicador de typing: {e.response.status_code}")
+            logger.warning(f"   📄 Respuesta del servidor: {e.response.text}")
+            return False
+        except httpx.RequestError as e:
+            logger.warning(f"⚠️  Error de conexión al enviar indicador de typing: {e}")
+            return False
+        except Exception as e:
+            logger.warning(f"⚠️  Error inesperado al enviar indicador de typing: {e}", exc_info=True)
+            return False

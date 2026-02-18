@@ -201,6 +201,15 @@ async def receive(request: Request):
             logger.info(f"   📱 Teléfono: {phone_number}")
             logger.info(f"   💬 Mensaje: {message_text}")
             
+            # Enviar indicador de typing para mejorar UX
+            if _settings.whatsapp_api_url and _settings.whatsapp_access_token:
+                try:
+                    whatsapp_client = WhatsAppClient()
+                    await whatsapp_client.send_typing_indicator(phone_number, is_typing=True)
+                    logger.debug("⌨️  Indicador de typing activado")
+                except Exception as e:
+                    logger.debug(f"⚠️  No se pudo enviar indicador de typing: {e}")
+            
             # Enviar al agente y obtener respuesta
             try:
                 logger.info("🤖 Iniciando comunicación con el agente...")
@@ -227,6 +236,9 @@ async def receive(request: Request):
                             try:
                                 whatsapp_client = WhatsAppClient()
                                 logger.debug(f"   🔗 URL de WhatsApp API: {_settings.whatsapp_api_url}")
+                                
+                                # El typing se desactiva automáticamente al enviar el mensaje
+                                # No es necesario enviar typing_off explícitamente
                                 
                                 sent = await whatsapp_client.send_message(phone_number, response_text)
                                 if sent:
