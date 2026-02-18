@@ -181,37 +181,49 @@ class WhatsAppClient:
             logger.error(f"❌ Error inesperado al enviar mensaje interactivo a WhatsApp: {e}", exc_info=True)
             return False
     
-    async def send_typing_indicator(self, phone_number: str, is_typing: bool = True) -> bool:
+    async def send_typing_indicator(self, phone_number: str, message_id: str | None = None, is_typing: bool = True) -> bool:
         """
         Envía un indicador de typing (escribiendo) a WhatsApp.
         
-        Según la documentación oficial de WhatsApp Business API:
-        https://developers.facebook.com/documentation/business-messaging/whatsapp/typing-indicators
+        Formato según documentación oficial:
+        {
+          "messaging_product": "whatsapp",
+          "status": "read",
+          "message_id": "<WHATSAPP_MESSAGE_ID>",
+          "typing_indicator": {
+            "type": "text"
+          }
+        }
         
         Args:
             phone_number: Número de teléfono del destinatario (con código de país, sin +)
-            is_typing: True para mostrar "escribiendo...", False para ocultarlo (se envía un mensaje vacío)
+            message_id: ID del mensaje al que se responde (opcional, pero recomendado)
+            is_typing: True para mostrar "escribiendo...", False para ocultarlo
             
         Returns:
             True si se envió correctamente, False en caso contrario
         """
         try:
-            # Según la documentación oficial, el formato correcto es:
-            # Para activar typing: type: "typing"
-            # Para desactivar: simplemente no se envía nada o se envía un mensaje normal
-            
             if not is_typing:
                 # Para desactivar el typing, no necesitamos enviar nada especial
                 # El typing se desactiva automáticamente cuando enviamos un mensaje
                 logger.debug(f"⌨️  Typing se desactivará automáticamente al enviar el siguiente mensaje")
                 return True
             
+            # Si no tenemos message_id, no podemos enviar el typing indicator
+            # ya que el formato requiere message_id
+            if not message_id:
+                logger.debug(f"⌨️  No se puede enviar typing indicator sin message_id")
+                return False
+            
             # Formato correcto según documentación oficial de WhatsApp Business API
             payload = {
                 "messaging_product": "whatsapp",
-                "recipient_type": "individual",
-                "to": phone_number,
-                "type": "typing"
+                "status": "read",
+                "message_id": message_id,
+                "typing_indicator": {
+                    "type": "text"
+                }
             }
             
             logger.info(f"⌨️  Enviando indicador de typing a WhatsApp para {phone_number}")

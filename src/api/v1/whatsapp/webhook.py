@@ -30,9 +30,9 @@ class TaskNotificationRequest(BaseModel):
     actions: List[TaskAction] = Field(..., description="Lista de botones/acciones (máximo 3)")
 
 
-def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
+def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None, str | None]:
     """
-    Extrae el número de teléfono y el texto del mensaje del payload de WhatsApp.
+    Extrae el número de teléfono, el texto del mensaje y el ID del mensaje del payload de WhatsApp.
     
     Soporta dos tipos de mensajes:
     1. Mensajes de texto: extrae el texto del campo text.body
@@ -46,6 +46,7 @@ def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
           "value": {
             "messages": [{
               "from": "569XXXXXXXX",
+              "id": "wamid.XXX",
               "type": "text",
               "text": {"body": "Hola"}
             }],
@@ -65,6 +66,7 @@ def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
           "value": {
             "messages": [{
               "from": "569XXXXXXXX",
+              "id": "wamid.XXX",
               "type": "interactive",
               "interactive": {
                 "type": "button_reply",
@@ -83,7 +85,7 @@ def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
         payload: Payload completo del webhook de WhatsApp
         
     Returns:
-        Tupla (phone_number, message_text) o (None, None) si no se encuentra
+        Tupla (phone_number, message_text, message_id) o (None, None, None) si no se encuentra
         Para mensajes interactivos, message_text será el ID del botón
     """
     try:
@@ -94,7 +96,7 @@ def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
         entries = payload.get("entry", [])
         if not entries:
             logger.warning("No se encontraron 'entry' en el payload")
-            return None, None
+            return None, None, None
         
         for entry in entries:
             changes = entry.get("changes", [])
@@ -116,8 +118,9 @@ def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
                     continue
                 
                 for message in messages:
-                    # Obtener número de teléfono del remitente
+                    # Obtener número de teléfono del remitente y ID del mensaje
                     phone_number = message.get("from")
+                    message_id = message.get("id")
                     message_type = message.get("type")
                     
                     if not phone_number:
@@ -130,8 +133,8 @@ def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
                         message_text = text_obj.get("body", "")
                         
                         if message_text:
-                            logger.debug(f"Extraído mensaje de texto: phone={phone_number}, text={message_text}")
-                            return phone_number, message_text
+                            logger.debug(f"Extraído mensaje de texto: phone={phone_number}, text={message_text}, id={message_id}")
+                            return phone_number, message_text, message_id
                         else:
                             logger.warning(f"Mensaje de texto sin body: {message}")
                     
@@ -146,9 +149,9 @@ def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
                             button_title = button_reply.get("title", "")
                             
                             if button_id:
-                                logger.info(f"Extraído mensaje interactivo: phone={phone_number}, button_id={button_id}, button_title={button_title}")
+                                logger.info(f"Extraído mensaje interactivo: phone={phone_number}, button_id={button_id}, button_title={button_title}, id={message_id}")
                                 # Enviar el ID del botón como mensaje al agente
-                                return phone_number, button_id
+                                return phone_number, button_id, message_id
                             else:
                                 logger.warning(f"Mensaje interactivo sin button_reply.id: {message}")
                         else:
@@ -161,7 +164,7 @@ def extract_whatsapp_message(payload: dict) -> tuple[str | None, str | None]:
     except Exception as e:
         logger.error(f"Error extrayendo mensaje del payload: {e}", exc_info=True)
     
-    return None, None
+    return None, None, None
 
 
 @router.get("/health")
@@ -192,20 +195,21 @@ async def receive(request: Request):
         payload = await request.json()
         logger.info(f"📦 Payload recibido: {json.dumps(payload, ensure_ascii=False)}")
         
-        # Extraer número de teléfono y mensaje del payload
-        logger.debug("🔍 Extrayendo número de teléfono y mensaje del payload...")
-        phone_number, message_text = extract_whatsapp_message(payload)
+        # Extraer número de teléfono, mensaje e ID del mensaje del payload
+        logger.debug("🔍 Extrayendo número de teléfono, mensaje e ID del mensaje del payload...")
+        phone_number, message_text, message_id = extract_whatsapp_message(payload)
         
         if phone_number and message_text:
             logger.info(f"✅ Mensaje extraído exitosamente")
             logger.info(f"   📱 Teléfono: {phone_number}")
             logger.info(f"   💬 Mensaje: {message_text}")
+            logger.info(f"   🆔 Message ID: {message_id}")
             
             # Enviar indicador de typing para mejorar UX
-            if _settings.whatsapp_api_url and _settings.whatsapp_access_token:
+            if _settings.whatsapp_api_url and _settings.whatsapp_access_token and message_id:
                 try:
                     whatsapp_client = WhatsAppClient()
-                    await whatsapp_client.send_typing_indicator(phone_number, is_typing=True)
+                    await whatsapp_client.send_typing_indicator(phone_number, message_id=message_id, is_typing=True)
                     logger.debug("⌨️  Indicador de typing activado")
                 except Exception as e:
                     logger.debug(f"⚠️  No se pudo enviar indicador de typing: {e}")
